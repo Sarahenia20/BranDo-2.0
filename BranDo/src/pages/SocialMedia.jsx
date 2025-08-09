@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Sphere } from '@react-three/drei';
 import { motion } from 'framer-motion';
-import { ArrowLeftIcon, PlayIcon, StopIcon, CogIcon, PlusIcon, ChartBarIcon, UserGroupIcon, Cog6ToothIcon } from '@heroicons/react/24/solid';
+import { ArrowLeftIcon, PlayIcon, StopIcon, CogIcon, PlusIcon, ChartBarIcon, UserGroupIcon, Cog6ToothIcon, HashtagIcon, TrashIcon } from '@heroicons/react/24/solid';
 import { useNavigate } from 'react-router-dom';
 import { useStateContext } from '../context/ContextProvider';
 import {
@@ -48,6 +48,12 @@ const SocialMedia = () => {
     autoComment: false,
     postSchedule: 'daily'
   });
+  const [hashtagCategories, setHashtagCategories] = useState([]);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const [customHashtags, setCustomHashtags] = useState('');
+  const [businessDescription, setBusinessDescription] = useState('');
+  const [smartHashtags, setSmartHashtags] = useState([]);
+  const [selectedHashtags, setSelectedHashtags] = useState([]);
   const navigate = useNavigate();
 
   const API_BASE_URL = 'http://localhost:5000/api';
@@ -58,6 +64,7 @@ const SocialMedia = () => {
     } else {
       fetchAccounts();
       checkAutomationStatus();
+      fetchHashtagCategories();
     }
   }, [userToken, navigate]);
 
@@ -113,6 +120,85 @@ const SocialMedia = () => {
       ...prev,
       [setting]: value
     }));
+  };
+
+  const fetchHashtagCategories = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/hashtags/categories`);
+      if (response.ok) {
+        const data = await response.json();
+        setHashtagCategories(data);
+      }
+    } catch (error) {
+      console.error('Error fetching hashtag categories:', error);
+    }
+  };
+
+  const generateSmartHashtags = async () => {
+    if (!businessDescription.trim()) return;
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/hashtags/smart-suggest`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ businessDescription })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setSmartHashtags(data.suggestedHashtags || []);
+      }
+    } catch (error) {
+      console.error('Error generating smart hashtags:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleHashtagSelect = (hashtag) => {
+    if (!selectedHashtags.includes(hashtag)) {
+      setSelectedHashtags([...selectedHashtags, hashtag]);
+    }
+  };
+
+  const handleHashtagRemove = (hashtag) => {
+    setSelectedHashtags(selectedHashtags.filter(h => h !== hashtag));
+  };
+
+  const addCustomHashtags = () => {
+    const hashtags = customHashtags
+      .split(/[,\s]+/)
+      .map(h => h.trim())
+      .filter(h => h.length > 0)
+      .map(h => h.startsWith('#') ? h : `#${h}`);
+    
+    const newHashtags = hashtags.filter(h => !selectedHashtags.includes(h));
+    setSelectedHashtags([...selectedHashtags, ...newHashtags]);
+    setCustomHashtags('');
+  };
+
+  const deleteAccount = async (accountId) => {
+    if (!window.confirm('Are you sure you want to disconnect this account?')) {
+      return;
+    }
+    
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/accounts/${accountId}`, {
+        method: 'DELETE'
+      });
+      
+      if (response.ok) {
+        setAccounts(accounts.filter(acc => acc.id !== accountId));
+      }
+    } catch (error) {
+      console.error('Error deleting account:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderDashboard = () => (
@@ -206,6 +292,14 @@ const SocialMedia = () => {
             }`}>
               {account.status}
             </div>
+            <button
+              onClick={() => deleteAccount(account.id)}
+              disabled={loading}
+              className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+              title="Disconnect Account"
+            >
+              <TrashIcon className="h-5 w-5" />
+            </button>
           </div>
         </div>
       ))}
@@ -283,6 +377,160 @@ const SocialMedia = () => {
     </div>
   );
 
+  const renderHashtags = () => (
+    <div className="space-y-6">
+      <h3 className="text-xl font-semibold">Hashtag Manager</h3>
+      
+      {/* Smart Hashtag Generation */}
+      <div className="bg-white p-6 rounded-lg border">
+        <h4 className="font-semibold mb-4">AI-Powered Hashtag Generator</h4>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Describe your business or post content
+            </label>
+            <textarea
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              rows="3"
+              placeholder="e.g., I run an organic food restaurant specializing in healthy Mediterranean cuisine..."
+              value={businessDescription}
+              onChange={(e) => setBusinessDescription(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={generateSmartHashtags}
+            disabled={loading || !businessDescription.trim()}
+            className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center space-x-2"
+          >
+            {loading ? (
+              <div className="animate-spin h-4 w-4 border-2 border-white border-t-transparent rounded-full" />
+            ) : (
+              <HashtagIcon className="h-4 w-4" />
+            )}
+            <span>{loading ? 'Generating...' : 'Generate Smart Hashtags'}</span>
+          </button>
+          
+          {smartHashtags.length > 0 && (
+            <div>
+              <p className="text-sm text-gray-600 mb-2">AI-generated hashtags:</p>
+              <div className="flex flex-wrap gap-2">
+                {smartHashtags.map((hashtag, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handleHashtagSelect(hashtag)}
+                    className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm hover:bg-blue-200 transition-colors"
+                  >
+                    {hashtag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Category-based Hashtags */}
+      <div className="bg-white p-6 rounded-lg border">
+        <h4 className="font-semibold mb-4">Browse by Category</h4>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {hashtagCategories.map((category) => (
+            <button
+              key={category.id}
+              onClick={() => setSelectedCategory(selectedCategory?.id === category.id ? null : category)}
+              className={`p-3 rounded-lg border text-left transition-colors ${
+                selectedCategory?.id === category.id
+                  ? 'bg-blue-100 border-blue-300 text-blue-800'
+                  : 'hover:bg-gray-50 border-gray-200'
+              }`}
+            >
+              <div className="font-medium">{category.name}</div>
+              <div className="text-sm text-gray-500">{category.count} hashtags</div>
+            </button>
+          ))}
+        </div>
+
+        {selectedCategory && (
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h5 className="font-medium mb-3">{selectedCategory.name} Hashtags</h5>
+            <div className="flex flex-wrap gap-2">
+              {selectedCategory.hashtags.map((hashtag, index) => (
+                <button
+                  key={index}
+                  onClick={() => handleHashtagSelect(hashtag)}
+                  className="bg-gray-200 text-gray-800 px-3 py-1 rounded-full text-sm hover:bg-gray-300 transition-colors"
+                >
+                  {hashtag}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Custom Hashtags */}
+      <div className="bg-white p-6 rounded-lg border">
+        <h4 className="font-semibold mb-4">Add Custom Hashtags</h4>
+        <div className="flex space-x-2">
+          <input
+            type="text"
+            className="flex-1 p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Type hashtags separated by commas or spaces (e.g., photography, nature, art)"
+            value={customHashtags}
+            onChange={(e) => setCustomHashtags(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && addCustomHashtags()}
+          />
+          <button
+            onClick={addCustomHashtags}
+            disabled={!customHashtags.trim()}
+            className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 disabled:opacity-50"
+          >
+            Add
+          </button>
+        </div>
+      </div>
+
+      {/* Selected Hashtags */}
+      {selectedHashtags.length > 0 && (
+        <div className="bg-white p-6 rounded-lg border">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-semibold">Selected Hashtags ({selectedHashtags.length})</h4>
+            <button
+              onClick={() => setSelectedHashtags([])}
+              className="text-red-500 hover:text-red-700 text-sm"
+            >
+              Clear All
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {selectedHashtags.map((hashtag, index) => (
+              <div
+                key={index}
+                className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-sm flex items-center space-x-2"
+              >
+                <span>{hashtag}</span>
+                <button
+                  onClick={() => handleHashtagRemove(hashtag)}
+                  className="text-purple-600 hover:text-purple-800"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+            <p className="text-sm text-gray-600 mb-2">Copy hashtags for your posts:</p>
+            <textarea
+              readOnly
+              className="w-full p-2 bg-white border border-gray-300 rounded text-sm"
+              rows="3"
+              value={selectedHashtags.join(' ')}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className="relative w-full h-full">
       {/* Canvas for animated blobs */}
@@ -323,6 +571,7 @@ const SocialMedia = () => {
             {[
               { id: 'dashboard', label: 'Dashboard', icon: ChartBarIcon },
               { id: 'accounts', label: 'Accounts', icon: UserGroupIcon },
+              { id: 'hashtags', label: 'Hashtags', icon: HashtagIcon },
               { id: 'settings', label: 'Settings', icon: Cog6ToothIcon }
             ].map(tab => (
               <button
@@ -344,6 +593,7 @@ const SocialMedia = () => {
           <div className="flex-1 overflow-auto p-6">
             {activeTab === 'dashboard' && renderDashboard()}
             {activeTab === 'accounts' && renderAccounts()}
+            {activeTab === 'hashtags' && renderHashtags()}
             {activeTab === 'settings' && renderSettings()}
           </div>
         </motion.div>
